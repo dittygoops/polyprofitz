@@ -1,0 +1,32 @@
+{
+  "name": "polyprofitz",
+  "version": "1.0.0",
+  "description": "CLI tool for fetching and storing Polymarket event data",
+  "main": "dist/index.js",
+  "bin": {
+    "polyprofitz": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "ts-node src/index.ts",
+    "fetch": "ts-node src/index.ts fetch-event"
+  },
+  "keywords": [
+    "polymarket",
+    "prediction-markets",
+    "cli"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "axios": "^1.6.2",
+    "commander": "^11.1.0",
+    "date-fns": "^3.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.5",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.3.3"
+  }
+}
