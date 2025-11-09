@@ -1,19 +1,16 @@
 import { Request, Response, NextFunction } from 'express';
 import { PolymarketService } from '../services/polymarketService';
-import { ClaudeService } from '../services/claudeService';
 import { TrendsService } from '../services/trendsService';
 import { MetricsService } from '../services/metricsService';
 import { AnalysisResponse, OutcomeAnalysis } from '../types/analysis';
 
 export class AnalysisController {
   private polymarketService: PolymarketService;
-  private claudeService: ClaudeService;
   private trendsService: TrendsService;
   private metricsService: MetricsService;
 
   constructor() {
     this.polymarketService = new PolymarketService();
-    this.claudeService = new ClaudeService();
     this.trendsService = new TrendsService();
     this.metricsService = new MetricsService();
   }
@@ -39,19 +36,11 @@ export class AnalysisController {
       const category = this.polymarketService.extractCategory(marketData);
       const mri = this.polymarketService.getMRI(category);
 
-      // Step 4: Convert market question to search query using Claude (ONCE for all outcomes)
-      console.log(`Converting market question to search query: ${marketData.market.question}`);
-      const searchQuery = await this.claudeService.extractSearchQuery(marketData.market.question);
-
-      // Step 5: Fetch Google Trends data (ONCE for all outcomes)
-      console.log(`Fetching Google Trends for: ${searchQuery}`);
-      const trendsResult = await this.trendsService.getGoogleTrends(searchQuery, 7);
-
-      // Step 6: Analyze EACH outcome
+      // Step 4: Analyze EACH outcome
       const outcomeAnalyses: OutcomeAnalysis[] = [];
 
       for (const token of tokens) {
-        console.log(`Analyzing outcome: ${token.outcome}`);
+        console.log(`\nAnalyzing outcome: ${token.outcome}`);
 
         const priceHistory = token.priceHistory;
 
@@ -63,6 +52,12 @@ export class AnalysisController {
         const hoursBack24 = Math.min(24, priceHistory.length - 1);
         const twentyFourHoursAgoPrice = priceHistory[priceHistory.length - 1 - hoursBack24]?.p || currentPrice;
 
+        // Calculate volume spike metrics from market-level volume data (no auth required)
+        const volumeMetrics = this.trendsService.calculateVolumeMetrics(
+          marketData.market.volume24hr,
+          marketData.market.volume1wk
+        );
+
         // Calculate metrics for this outcome
         const metrics = this.metricsService.calculateMetrics(
           {
@@ -70,18 +65,13 @@ export class AnalysisController {
             sevenDaysAgo: sevenDaysAgoPrice,
             twentyFourHoursAgo: twentyFourHoursAgoPrice,
           },
-          {
-            current: trendsResult.current,
-            twentyFourHoursAgo: trendsResult.twentyFourHoursAgo,
-            sevenDaysAgo: trendsResult.sevenDaysAgo,
-            history: trendsResult.history,
-          },
+          volumeMetrics,
           marketVolume,
           mri
         );
 
         // Calculate scores for this outcome
-        const scores = this.metricsService.calculateScores(metrics, marketVolume);
+        const scores = this.metricsService.calculateScores(metrics, marketVolume, { current: currentPrice });
 
         // Generate recommendation for this outcome
         const recommendation = this.metricsService.generateRecommendation(scores.tradeScore, currentPrice, metrics);
@@ -95,6 +85,11 @@ export class AnalysisController {
             current: currentPrice,
             sevenDaysAgo: sevenDaysAgoPrice,
             twentyFourHoursAgo: twentyFourHoursAgoPrice,
+          },
+          volume: {
+            current_24h: volumeMetrics.volume_24h,
+            total_7d: volumeMetrics.volume_7d,
+            avg_per_day: volumeMetrics.avg_per_day,
           },
           recommendation,
           priceHistory,
@@ -113,12 +108,6 @@ export class AnalysisController {
             currentPrice: 0, // Not meaningful for multi-outcome
             volume: marketVolume,
             title: marketData.market.question || '',
-          },
-          trends: {
-            current: trendsResult.current,
-            sevenDaysAgo: trendsResult.sevenDaysAgo,
-            searchQuery,
-            history: trendsResult.history,
           },
           outcomes: outcomeAnalyses,
           volume: marketVolume,

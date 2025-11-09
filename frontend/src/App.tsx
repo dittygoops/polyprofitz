@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { SearchForm } from './components/SearchForm';
 import { LoadingSpinner } from './components/LoadingSpinner';
 import { AnalysisResults } from './components/AnalysisResults';

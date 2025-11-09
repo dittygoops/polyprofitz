@@ -1,14 +1,13 @@
 import React from 'react';
 import { AnalysisData } from '../types';
 import { OutcomeCard } from './OutcomeCard';
-import { TrendsChart } from './TrendsChart';
 
 interface AnalysisResultsProps {
   data: AnalysisData;
 }
 
 export const AnalysisResults: React.FC<AnalysisResultsProps> = ({ data }) => {
-  const { market, trends, outcomes } = data;
+  const { market, outcomes } = data;
 
   // Find the outcome with the highest trade score
   const bestOutcome = outcomes.reduce((best, current) =>
@@ -44,19 +43,49 @@ export const AnalysisResults: React.FC<AnalysisResultsProps> = ({ data }) => {
         </p>
       </div>
 
-      {/* Google Trends Chart */}
+      {/* Volume Analysis - Best Outcome */}
       <div className="bg-white rounded-lg shadow-lg p-6 border border-gray-200">
-        <h2 className="text-xl font-bold text-gray-900 mb-4">Market Sentiment (Google Trends)</h2>
-        <TrendsChart data={trends.history || []} searchQuery={trends.searchQuery} />
-        <div className="grid grid-cols-2 gap-4 mt-4">
-          <div className="text-center p-3 bg-gray-50 rounded-lg">
-            <p className="text-sm text-gray-600">Current Interest</p>
-            <p className="text-2xl font-bold text-gray-900">{trends.current}</p>
+        <h2 className="text-xl font-bold text-gray-900 mb-4">
+          📊 Volume Analysis - {bestOutcome.outcome}
+        </h2>
+        <p className="text-sm text-gray-600 mb-4">
+          Trading volume spikes indicate hype entering the market - prime fade opportunities
+        </p>
+        <div className="grid grid-cols-3 gap-4">
+          <div className="text-center p-4 bg-gray-50 rounded-lg border border-gray-200">
+            <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Last 24 Hours</p>
+            <p className="text-2xl font-bold text-blue-600">
+              ${(bestOutcome.volume.current_24h / 1000).toFixed(1)}K
+            </p>
+            <p className="text-xs text-gray-500 mt-1">Trading Volume</p>
           </div>
-          <div className="text-center p-3 bg-gray-50 rounded-lg">
-            <p className="text-sm text-gray-600">7 Days Ago</p>
-            <p className="text-2xl font-bold text-gray-900">{trends.sevenDaysAgo}</p>
+          <div className="text-center p-4 bg-gray-50 rounded-lg border border-gray-200">
+            <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Daily Average</p>
+            <p className="text-2xl font-bold text-gray-700">
+              ${(bestOutcome.volume.avg_per_day / 1000).toFixed(1)}K
+            </p>
+            <p className="text-xs text-gray-500 mt-1">6-Day Baseline</p>
           </div>
+          <div className="text-center p-4 bg-gradient-to-br from-orange-50 to-red-50 rounded-lg border border-orange-200">
+            <p className="text-xs text-orange-700 uppercase tracking-wide mb-1 font-semibold">Volume Spike</p>
+            <p className="text-2xl font-bold text-orange-600">
+              {bestOutcome.metrics.vc_24h >= 0 ? '+' : ''}{(bestOutcome.metrics.vc_24h * 100).toFixed(0)}%
+            </p>
+            <p className="text-xs text-orange-600 mt-1 font-medium">
+              {bestOutcome.metrics.vc_24h > 2.0 ? '🔥 STRONG SPIKE!' :
+               bestOutcome.metrics.vc_24h > 1.0 ? '⚡ MODERATE SPIKE' :
+               bestOutcome.metrics.vc_24h > 0 ? '↗️ ELEVATED' :
+               bestOutcome.metrics.vc_24h < 0 ? '↘️ COOLING OFF' : '→ NORMAL'}
+            </p>
+          </div>
+        </div>
+        <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+          <p className="text-sm text-blue-900">
+            <strong>7-Day Total Volume:</strong> ${(bestOutcome.volume.total_7d / 1000).toFixed(1)}K
+            {bestOutcome.metrics.rw === 1.0 && (
+              <span className="ml-2 text-orange-600 font-semibold">• 🔝 AT VOLUME PEAK</span>
+            )}
+          </p>
         </div>
       </div>
 
@@ -65,7 +94,7 @@ export const AnalysisResults: React.FC<AnalysisResultsProps> = ({ data }) => {
         <h2 className="text-2xl font-bold text-gray-900 mb-4">All Outcomes Analysis</h2>
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {outcomes.map((outcome, index) => (
-            <OutcomeCard key={index} outcome={outcome} trendsSearchQuery={trends.searchQuery} />
+            <OutcomeCard key={index} outcome={outcome} />
           ))}
         </div>
       </div>

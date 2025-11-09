@@ -14,20 +14,21 @@ export interface PriceData {
   twentyFourHoursAgo: number;
 }
 
-export interface TrendsData {
-  current: number;
-  sevenDaysAgo: number;
-  searchQuery: string;
-  history: TrendsPoint[];
+export interface VolumeData {
+  current_24h: number;
+  total_7d: number;
+  avg_per_day: number;
 }
 
 export interface Metrics {
-  SVC: number;
-  PM: number;
-  VS: number;
-  OES: number;
-  RW: number;
-  MRI: number;
+  vc: number;      // Volume Change (replaces SVC)
+  vc_24h: number;  // 24h volume change component
+  vc_7d: number;   // 7d volume change component
+  pm: number;      // Price Movement
+  vs: number;      // Velocity Score
+  oes: number;     // Odds Extremity Score
+  rw: number;      // Recency Weight
+  mri: number;     // Mean Reversion Indicator
 }
 
 export interface Scores {
@@ -58,13 +59,13 @@ export interface OutcomeAnalysis {
   scores: Scores;
   metrics: Metrics;
   prices: PriceData;
+  volume: VolumeData;  // NEW: Volume statistics per outcome
   recommendation: Recommendation;
   priceHistory: PricePoint[];
 }
 
 export interface AnalysisData {
   market: MarketData;
-  trends: TrendsData;
   outcomes: OutcomeAnalysis[];
   volume: number;
 }

@@ -9,6 +9,9 @@ export interface CLIMarketData {
     description?: string;
     outcomes?: string;
     volume: string;
+    volume24hr?: number;
+    volume1wk?: number;
+    volumeClob?: number;
     closed?: boolean;
     tags?: Array<{
       id: string;
@@ -22,6 +25,7 @@ export interface CLIMarketData {
     priceHistory: Array<{
       t: number;  // Unix timestamp
       p: string;  // Price as string
+      v?: number; // Volume (optional, calculated from trades)
     }>;
   }>;
   fetchedAt: string;
@@ -68,14 +72,15 @@ export class FileService {
   extractAllTokens(data: CLIMarketData): Array<{
     outcome: string;
     tokenId: string;
-    priceHistory: Array<{ t: number; p: number }>;
+    priceHistory: Array<{ t: number; p: number; v?: number }>;
   }> {
     return data.tokens.map(token => ({
       outcome: token.outcome,
       tokenId: token.tokenId,
       priceHistory: token.priceHistory.map(point => ({
         t: point.t,
-        p: parseFloat(point.p),
+        p: typeof point.p === 'string' ? parseFloat(point.p) : point.p,
+        v: point.v || 0,  // Include volume, default to 0 if not present
       })),
     }));
   }

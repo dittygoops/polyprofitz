@@ -254,10 +254,13 @@ export async function fetchEventCommand(
       console.warn(`  - Could not fetch price history: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
 
+    // Note: We use market-level volume data (volume24hr, volume1wk) instead of
+    // fetching individual trades (which requires auth). This is faster and simpler.
+
     const tokenData: TokenData = {
       tokenId: token.token_id,
       outcome: token.outcome,
-      priceHistory,
+      priceHistory: priceHistory,
       trades: [],
       volumeMetrics: {
         total_volume: '0',

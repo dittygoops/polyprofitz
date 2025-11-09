@@ -5,10 +5,9 @@ import { PriceChart } from './PriceChart';
 
 interface OutcomeCardProps {
   outcome: OutcomeAnalysis;
-  trendsSearchQuery: string;
 }
 
-export const OutcomeCard: React.FC<OutcomeCardProps> = ({ outcome, trendsSearchQuery }) => {
+export const OutcomeCard: React.FC<OutcomeCardProps> = ({ outcome }) => {
   const getSignalColor = (signal: string) => {
     if (signal.includes('STRONG')) return 'bg-red-100 text-red-800 border-red-300';
     if (signal.includes('MODERATE')) return 'bg-yellow-100 text-yellow-800 border-yellow-300';
@@ -16,9 +15,9 @@ export const OutcomeCard: React.FC<OutcomeCardProps> = ({ outcome, trendsSearchQ
     return 'bg-gray-100 text-gray-800 border-gray-300';
   };
 
-  const getSVCTrend = () => {
-    if (outcome.metrics.SVC > 0.5) return 'up';
-    if (outcome.metrics.SVC < -0.5) return 'down';
+  const getVCTrend = () => {
+    if (outcome.metrics.vc > 0.5) return 'up';
+    if (outcome.metrics.vc < -0.5) return 'down';
     return 'neutral';
   };
 
@@ -82,14 +81,14 @@ export const OutcomeCard: React.FC<OutcomeCardProps> = ({ outcome, trendsSearchQ
         <h4 className="font-semibold text-gray-900 mb-2">Key Metrics</h4>
         <div className="grid grid-cols-2 gap-2">
           <MetricsCard
-            label="Search Volume Change"
-            value={`${(outcome.metrics.SVC * 100).toFixed(0)}%`}
-            description="Google Trends (7d)"
-            trend={getSVCTrend()}
+            label="Volume Spike"
+            value={`${(outcome.metrics.vc * 100).toFixed(0)}%`}
+            description="Trading volume change"
+            trend={getVCTrend()}
           />
           <MetricsCard
             label="Price Movement"
-            value={`${(outcome.metrics.PM * 100).toFixed(0)}%`}
+            value={`${(outcome.metrics.pm * 100).toFixed(0)}%`}
             description="Price change (7d)"
             trend={getPMTrend()}
           />

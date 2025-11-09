@@ -93,7 +93,7 @@ export class PolymarketClient {
     tokenId: string,
     startDate?: Date,
     endDate?: Date,
-    fidelity: number = 720 // 12 hours between data points by default
+    fidelity: number = 60 // 1 hour between data points (was 720 = 12 hours)
   ): Promise<PricePoint[]> {
     try {
       const params: any = {
@@ -146,7 +146,7 @@ export class PolymarketClient {
         params.before = Math.floor(endDate.getTime() / 1000);
       }
 
-      const response = await this.client.get('/data/trades', {
+      const response = await this.clobClient.get('/trades', {
         params,
       });
 

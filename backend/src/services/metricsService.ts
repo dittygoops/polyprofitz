@@ -1,4 +1,5 @@
 import { Metrics, Scores, Recommendation } from '../types/analysis';
+import { VolumeMetrics } from './trendsService';
 
 export interface PriceInput {
   current: number;
@@ -6,17 +7,10 @@ export interface PriceInput {
   twentyFourHoursAgo: number;
 }
 
-export interface TrendsInput {
-  current: number;
-  twentyFourHoursAgo: number;
-  sevenDaysAgo: number;
-  history: Array<{ t: number; v: number }>;
-}
-
 export class MetricsService {
   calculateMetrics(
     prices: PriceInput,
-    trends: TrendsInput,
+    volumeMetrics: VolumeMetrics,
     marketVolume: number,
     mri: number
   ): Metrics {
@@ -28,22 +22,19 @@ export class MetricsService {
     - Current: ${prices.current.toFixed(4)}
     - 24h ago: ${prices.twentyFourHoursAgo.toFixed(4)}
     - 7d ago:  ${prices.sevenDaysAgo.toFixed(4)}`);
-    console.log(`  Trends:
-    - Current: ${trends.current}
-    - 24h ago: ${trends.twentyFourHoursAgo}
-    - 7d ago:  ${trends.sevenDaysAgo}
-    - History: ${trends.history.length} points`);
+    console.log(`  Volume:
+    - VC (combined): ${(volumeMetrics.vc * 100).toFixed(1)}%
+    - VC_24h: ${(volumeMetrics.vc_24h * 100).toFixed(1)}%
+    - VC_7d: ${(volumeMetrics.vc_7d * 100).toFixed(1)}%
+    - RW (from volume): ${volumeMetrics.rw}`);
     console.log(`  Market Volume: $${(marketVolume / 1000000).toFixed(2)}M`);
     console.log(`  MRI (category): ${mri}`);
 
-    // SVC (Search Volume Change) - Dual Window
-    console.log('\n🔍 Calculating SVC (Search Volume Change):');
-    const SVC_24h = (trends.current - trends.twentyFourHoursAgo) / (trends.twentyFourHoursAgo || 1);
-    const SVC_7d = (trends.current - trends.sevenDaysAgo) / (trends.sevenDaysAgo || 1);
-    const SVC = (SVC_24h * 0.6) + (SVC_7d * 0.4);
-    console.log(`  SVC_24h = (${trends.current} - ${trends.twentyFourHoursAgo}) / ${trends.twentyFourHoursAgo || 1} = ${SVC_24h.toFixed(3)}`);
-    console.log(`  SVC_7d  = (${trends.current} - ${trends.sevenDaysAgo}) / ${trends.sevenDaysAgo || 1} = ${SVC_7d.toFixed(3)}`);
-    console.log(`  SVC     = (${SVC_24h.toFixed(3)} × 0.6) + (${SVC_7d.toFixed(3)} × 0.4) = ${SVC.toFixed(3)}`);
+    // VC (Volume Change) - Already calculated in volumeMetrics
+    console.log('\n🔥 Volume Change (VC):');
+    const VC = volumeMetrics.vc;
+    console.log(`  VC = ${(VC * 100).toFixed(1)}% (volume spike indicator)`);
+    console.log(`  Interpretation: ${VC > 2.0 ? '🔥 STRONG SPIKE!' : VC > 1.0 ? '⚡ MODERATE SPIKE' : VC > 0 ? '↗️ ELEVATED' : VC < 0 ? '↘️ COOLING OFF' : '→ NORMAL'}`);
 
     // PM (Price Movement)
     console.log('\n💰 Calculating PM (Price Movement):');
@@ -74,80 +65,93 @@ export class MetricsService {
     const OES = Math.abs(prices.current - 0.5) * 2;
     console.log(`  OES = |${prices.current.toFixed(4)} - 0.5| × 2 = ${OES.toFixed(4)}`);
 
-    // RW (Recency Weight)
-    console.log('\n⏰ Calculating RW (Recency Weight):');
-    const allTrendValues = trends.history.map(p => p.v);
-    const maxTrend = allTrendValues.length > 0 
-      ? Math.max(...allTrendValues)
-      : trends.current;
-    const threshold = maxTrend * 0.9;
-    const RW = trends.current >= threshold ? 1.0 : 0.5;
-    console.log(`  Max trend in history: ${maxTrend}`);
-    console.log(`  90% threshold: ${threshold.toFixed(1)}`);
-    console.log(`  Current (${trends.current}) >= threshold (${threshold.toFixed(1)})? ${trends.current >= threshold ? 'YES' : 'NO'}`);
-    console.log(`  RW = ${RW}`);
+    // RW (Recency Weight) - From volume peak detection
+    console.log('\n⏰ Recency Weight (RW):');
+    const RW = volumeMetrics.rw;
+    console.log(`  RW = ${RW} (from volume peak detection)`);
+    console.log(`  Interpretation: ${RW === 1.0 ? '🔝 Volume at PEAK (prime fade time)' : '⚠️ Volume elevated but not at peak'}`);
 
     const metrics = {
-      SVC: this.roundToTwo(SVC),
-      PM: this.roundToTwo(PM),
-      VS: this.roundToTwo(VS),
-      OES: this.roundToTwo(OES),
-      RW: this.roundToTwo(RW),
-      MRI: this.roundToTwo(mri),
+      vc: this.roundToTwo(VC),             // Volume Change (replaces SVC)
+      vc_24h: this.roundToTwo(volumeMetrics.vc_24h),  // NEW
+      vc_7d: this.roundToTwo(volumeMetrics.vc_7d),    // NEW
+      pm: this.roundToTwo(PM),
+      vs: this.roundToTwo(VS),
+      oes: this.roundToTwo(OES),
+      rw: this.roundToTwo(RW),
+      mri: this.roundToTwo(mri),
     };
 
     console.log('\n✅ Final Metrics:');
-    console.log(`  SVC: ${metrics.SVC} (Search Volume Change)`);
-    console.log(`  PM:  ${metrics.PM} (Price Movement)`);
-    console.log(`  VS:  ${metrics.VS} (Velocity Score)`);
-    console.log(`  OES: ${metrics.OES} (Odds Extremity Score)`);
-    console.log(`  RW:  ${metrics.RW} (Recency Weight)`);
-    console.log(`  MRI: ${metrics.MRI} (Mean Reversion Indicator)`);
+    console.log(`  VC:  ${metrics.vc} (Volume Change - replaces SVC)`);
+    console.log(`  PM:  ${metrics.pm} (Price Movement)`);
+    console.log(`  VS:  ${metrics.vs} (Velocity Score)`);
+    console.log(`  OES: ${metrics.oes} (Odds Extremity Score)`);
+    console.log(`  RW:  ${metrics.rw} (Recency Weight)`);
+    console.log(`  MRI: ${metrics.mri} (Mean Reversion Indicator)`);
     console.log('📊 === METRICS CALCULATION END ===\n');
 
     return metrics;
   }
 
-  calculateScores(metrics: Metrics, marketVolume: number): Scores {
-    const { SVC, PM, VS, OES, RW, MRI } = metrics;
+  calculateScores(metrics: Metrics, marketVolume: number, prices?: { current: number }): Scores {
+    const { vc, pm, vs, oes, rw, mri } = metrics;
 
     console.log('\n🎲 === SCORES CALCULATION START ===');
     console.log('\n📊 Input Metrics:');
-    console.log(`  SVC: ${SVC}, PM: ${PM}, VS: ${VS}, OES: ${OES}, RW: ${RW}, MRI: ${MRI}`);
+    console.log(`  VC: ${vc}, PM: ${pm}, VS: ${vs}, OES: ${oes}, RW: ${rw}, MRI: ${mri}`);
     console.log(`  Market Volume: $${(marketVolume / 1000000).toFixed(2)}M`);
 
-    // Hype Ratio
-    console.log('\n🔥 Calculating Hype Ratio:');
-    const numerator = SVC * PM * VS;
-    const logVolume = Math.log(marketVolume + 1);
-    const oesMultiplier = 1 + OES;
-    console.log(`  Step 1: SVC × PM × VS = ${SVC} × ${PM} × ${VS} = ${numerator.toFixed(4)}`);
-    console.log(`  Step 2: log(MV + 1) = log(${marketVolume + 1}) = ${logVolume.toFixed(4)}`);
-    console.log(`  Step 3: (1 + OES) = (1 + ${OES}) = ${oesMultiplier.toFixed(4)}`);
-    console.log(`  Step 4: numerator / logVolume = ${numerator.toFixed(4)} / ${logVolume.toFixed(4)} = ${(numerator / logVolume).toFixed(4)}`);
-    console.log(`  Step 5: × (1 + OES) = ${(numerator / logVolume).toFixed(4)} × ${oesMultiplier.toFixed(4)} = ${((numerator / logVolume) * oesMultiplier).toFixed(4)}`);
-    const Hype_Ratio = (numerator / logVolume) * oesMultiplier * RW;
-    console.log(`  Step 6: × RW = ${((numerator / logVolume) * oesMultiplier).toFixed(4)} × ${RW} = ${Hype_Ratio.toFixed(4)}`);
-    console.log(`  Hype_Ratio = ${Hype_Ratio.toFixed(4)}`);
+    // SIMPLIFIED HYPE FORMULA - much more forgiving!
+    console.log('\n🔥 Calculating Hype Ratio (Simplified):');
+    
+    // Use baseline + actual values so nothing kills the signal
+    const vcComponent = 0.5 + (vc * 2);  // Baseline 0.5, VC adds up to 2x boost
+    const pmComponent = pm * 10;          // Price movement is primary driver
+    const vsComponent = 0.3 + (vs * 0.7); // Baseline 0.3, VS can boost to 1.0
+    
+    console.log(`  VC component: 0.5 + (${vc} × 2) = ${vcComponent.toFixed(4)}`);
+    console.log(`  PM component: ${pm} × 10 = ${pmComponent.toFixed(4)}`);
+    console.log(`  VS component: 0.3 + (${vs} × 0.7) = ${vsComponent.toFixed(4)}`);
+    
+    const baseScore = vcComponent * pmComponent * vsComponent;
+    const oesBoost = 1 + (oes * 0.5);  // OES adds up to 50% boost
+    const rwBoost = rw;
+    
+    console.log(`  Base score: ${vcComponent.toFixed(4)} × ${pmComponent.toFixed(4)} × ${vsComponent.toFixed(4)} = ${baseScore.toFixed(4)}`);
+    console.log(`  OES boost: 1 + (${oes} × 0.5) = ${oesBoost.toFixed(4)}`);
+    console.log(`  RW boost: ${rwBoost}`);
+    
+    const Hype_Ratio = baseScore * oesBoost * rwBoost;
+    console.log(`  Hype_Ratio = ${baseScore.toFixed(4)} × ${oesBoost.toFixed(4)} × ${rwBoost} = ${Hype_Ratio.toFixed(4)}`);
 
-    // Confidence
+    // SIMPLIFIED CONFIDENCE - based on price movement strength
     console.log('\n🎯 Calculating Confidence:');
-    const volumeFactor = marketVolume / 10000;
-    const minValue = Math.min(SVC, PM, volumeFactor);
-    console.log(`  Volume factor: MV / 10000 = ${marketVolume} / 10000 = ${volumeFactor.toFixed(2)}`);
-    console.log(`  min(SVC, PM, Vol) = min(${SVC}, ${PM}, ${volumeFactor.toFixed(2)}) = ${minValue.toFixed(4)}`);
-    const Confidence = minValue * RW;
-    console.log(`  Confidence = ${minValue.toFixed(4)} × ${RW} = ${Confidence.toFixed(4)}`);
+    const Confidence = (pm * 5) + 0.5;  // PM drives it, plus baseline of 0.5
+    console.log(`  Confidence = (${pm} × 5) + 0.5 = ${Confidence.toFixed(4)}`);
 
-    // Trade Score
+    // TRADE SCORE - simpler multiplication
     console.log('\n⭐ Calculating Trade Score:');
-    const Trade_Score = Hype_Ratio * MRI * Confidence;
-    console.log(`  Trade_Score = Hype_Ratio × MRI × Confidence`);
-    console.log(`  Trade_Score = ${Hype_Ratio.toFixed(4)} × ${MRI} × ${Confidence.toFixed(4)}`);
+    const Trade_Score = (Hype_Ratio * Confidence * mri) / 10;  // Divide by 10 to normalize
+    console.log(`  Trade_Score = (${Hype_Ratio.toFixed(4)} × ${Confidence.toFixed(4)} × ${mri}) / 10`);
     console.log(`  Trade_Score = ${Trade_Score.toFixed(4)}`);
 
-    // Determine signal
-    const signal = this.getSignal(Trade_Score);
+    // Determine signal - can only FADE UP (buy underpriced), not fade down (can't short)
+    let signal: string;
+    
+    if (prices && Trade_Score >= 0.05) {
+      if (prices.current < 0.5) {
+        // Price is LOW and hyped down → We CAN fade UP by buying
+        const baseSignal = this.getSignal(Trade_Score);
+        signal = `${baseSignal} FADE ↑ (Buy to push toward 50%)`;
+      } else {
+        // Price is HIGH and hyped up → We CANNOT fade DOWN (can't short)
+        signal = 'SKIP 🚫 (Price too high to fade, can\'t short)';
+      }
+    } else {
+      signal = this.getSignal(Trade_Score);
+    }
+    
     console.log(`\n🚦 Signal: ${signal}`);
 
     const scores = {
@@ -184,20 +188,24 @@ export class MetricsService {
     let action: string;
     let targetExit: string;
 
-    if (tradeScore >= 0.5) {
-      // Strong fade signal
-      action = currentPrice > 0.5
-        ? `BUY NO at ${pricePercent}%`
-        : `BUY YES at ${pricePercent}%`;
-      targetExit = `Price reverts ${reversionPercent}% in 2-5 days`;
+    // FADE STRATEGY: We can only FADE UP (buy underpriced), NOT fade down (can't short)
+    // Only tradeable when price is LOW (<50%) and we want to buy it UP toward 50%
+    
+    if (currentPrice >= 0.5) {
+      // Price is HIGH - we would need to SHORT to fade, but we can't
+      action = `SKIP - Price too high (${pricePercent}%), can't fade down (no shorting)`;
+      targetExit = 'Wait for price to dump below 50%, or find undervalued outcome';
+    } else if (tradeScore >= 0.5) {
+      // Strong fade UP signal - price is LOW, buy it toward 50%
+      action = `FADE UP: BUY at ${pricePercent}% (hyped down, buy toward 50%)`;
+      targetExit = `Price reverts UP ${reversionPercent}% toward 50% in 2-5 days`;
     } else if (tradeScore >= 0.15) {
-      action = currentPrice > 0.5
-        ? `CONSIDER NO at ${pricePercent}%`
-        : `CONSIDER YES at ${pricePercent}%`;
-      targetExit = `Price reverts ${reversionPercent}% in 3-7 days`;
+      // Moderate fade UP signal
+      action = `CONSIDER: Buy at ${pricePercent}% (moderate undervalue signal)`;
+      targetExit = `Price reverts UP ${reversionPercent}% toward 50% in 3-7 days`;
     } else {
-      action = 'SKIP - Insufficient signal';
-      targetExit = 'Wait for stronger setup';
+      action = 'SKIP - Insufficient signal strength';
+      targetExit = 'Wait for stronger volume spike + price movement';
     }
 
     return {
@@ -234,20 +242,20 @@ export class MetricsService {
 
     // Factor in hype ratio if available
     if (metrics) {
-      const { SVC, PM, OES } = metrics;
+      const { vc, pm, oes } = metrics;
       
-      // Higher search volume change = stronger reversion potential
-      if (SVC > 0.5) {
+      // Higher volume change = stronger reversion potential
+      if (vc > 0.5) {
         scoreMultiplier *= 1.1;
       }
       
       // Higher price movement = more volatile, expect more reversion
-      if (PM > 0.3) {
+      if (pm > 0.3) {
         baseReversionPercent *= 1.1;
       }
       
       // More extreme odds = more room to revert
-      baseReversionPercent *= (1 + OES * 0.2);
+      baseReversionPercent *= (1 + oes * 0.2);
     }
 
     // Calculate final reversion percentage (cap between 15% and 85%)
