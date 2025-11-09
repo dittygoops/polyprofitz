@@ -28,7 +28,7 @@ export async function fetchEventCommand(
 
   console.log(`Searching for event: ${eventSlugOrQuery}...`);
 
-  // Parse date options if provided
+  // Parse date options if provided, default to last 7 days
   let startDate: Date | undefined;
   let endDate: Date | undefined;
 
@@ -39,6 +39,10 @@ export async function fetchEventCommand(
     } catch (error) {
       throw new Error(`Invalid start date: ${options.startDate}`);
     }
+  } else {
+    // Default to 7 days ago
+    startDate = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+    console.log(`Start date (default): ${formatISO(startDate)} (7 days ago)`);
   }
 
   if (options.endDate) {
@@ -48,6 +52,10 @@ export async function fetchEventCommand(
     } catch (error) {
       throw new Error(`Invalid end date: ${options.endDate}`);
     }
+  } else {
+    // Default to now
+    endDate = new Date();
+    console.log(`End date (default): ${formatISO(endDate)} (now)`);
   }
 
   // Step 1: Try to find the event by exact slug first
@@ -187,24 +195,37 @@ export async function fetchEventCommand(
     const marketTokens = checkForTokens(market, outcomeName) || checkForTokens(marketFromEvent, outcomeName) || [];
 
     if (marketTokens.length === 0) {
-      console.warn(`  Warning: No tokens found for market ${marketFromEvent.id}`);
+      // Silently skip markets without tokens (reduces noise for large multi-outcome events)
       continue;
     }
 
+    console.log(`  ✓ Found tokens for: ${outcomeName || marketFromEvent.question || 'market'}`);
+    
     // For multi-outcome events (with groupItemTitle), only take the first token (Yes)
     // For binary markets, take all tokens
     if (outcomeName && marketTokens.length > 1) {
-      console.log(`  Found 1 outcome: ${outcomeName}`);
       allTokens.push(marketTokens[0]); // Only the "Yes" token
     } else {
-      console.log(`  Found ${marketTokens.length} token(s)`);
       allTokens = allTokens.concat(marketTokens);
     }
   }
 
   if (allTokens.length === 0) {
-    throw new Error('\nNo CLOB token IDs found in any markets for this event.');
+    console.error('\n❌ No active markets found with trading data');
+    console.error(`   Event: ${event.title}`);
+    console.error(`   Total markets: ${event.markets.length}`);
+    console.error(`   Markets with tokens: 0`);
+    console.error('\n   This usually means:');
+    console.error('   • The market hasn\'t started trading yet');
+    console.error('   • The market is closed or inactive');
+    console.error('   • The market structure doesn\'t support CLOB trading');
+    console.error('\n   Try:');
+    console.error('   • Searching for a different, active market');
+    console.error('   • Waiting for this market to open for trading');
+    throw new Error('No tradable markets found in this event');
   }
+  
+  console.log(`\n✓ Successfully found ${allTokens.length} tradable outcome(s) from ${event.markets.length} total markets`);
 
   // Add tags to the primary market
   if (allTags.length > 0) {

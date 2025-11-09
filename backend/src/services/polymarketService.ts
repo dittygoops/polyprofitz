@@ -1,6 +1,5 @@
 import { CLIService } from './cliService';
 import { FileService, CLIMarketData } from './fileService';
-import { AppError } from '../middleware/errorHandler';
 
 export class PolymarketService {
   private cliService: CLIService;

@@ -12,7 +12,8 @@ export const PriceChart: React.FC<PriceChartProps> = ({ data, title = 'Price His
   const chartData = data.map((point) => ({
     time: point.t,
     price: point.p,
-    formattedTime: format(new Date(point.t), 'MMM dd HH:mm'),
+    // Convert Unix timestamp (seconds) to milliseconds for Date
+    formattedTime: format(new Date(point.t * 1000), 'MMM dd HH:mm'),
   }));
 
   return (

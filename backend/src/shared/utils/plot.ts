@@ -1,6 +1,5 @@
 import * as fs from 'fs';
-import * as path from 'path';
-import { EventData, PricePoint } from '../types/polymarket';
+import { EventData } from '../types/polymarket';
 import { fromUnixTimestamp } from './time';
 
 /**
@@ -10,7 +9,7 @@ export function plotPriceHistory(eventData: EventData, outputPath: string): stri
   const { market, tokens } = eventData;
 
   // Prepare data for each token
-  const traces = tokens.map((token, index) => {
+  const traces = tokens.map((token, _index) => {
     const timestamps = token.priceHistory.map(point =>
       fromUnixTimestamp(point.t).toISOString()
     );
