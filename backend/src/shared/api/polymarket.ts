@@ -205,20 +205,41 @@ export class PolymarketClient {
   }
 
   /**
-   * Search for events by exact slug match
+   * Search for events by query and return the closest match
    */
   async findClosestEvent(query: string, searchParams?: EventSearchParams): Promise<Event | null> {
     try {
-      // Try to get event by exact slug first
-      try {
-        const event = await this.getEventBySlug(query);
-        return event;
-      } catch (error) {
-        // If exact slug fails, return null
+      // Search events with pagination
+      const params: EventSearchParams = {
+        limit: 50,
+        ...searchParams,
+      };
+
+      const events = await this.searchEvents(params);
+
+      if (!events || events.length === 0) {
         return null;
       }
+
+      // Find best match based on title and slug similarity
+      let bestMatch: Event | null = null;
+      let bestScore = 0;
+
+      for (const event of events) {
+        const titleScore = event.title ? this.calculateSimilarity(event.title, query) : 0;
+        const slugScore = event.slug ? this.calculateSimilarity(event.slug, query) : 0;
+        const score = Math.max(titleScore, slugScore);
+
+        if (score > bestScore) {
+          bestScore = score;
+          bestMatch = event;
+        }
+      }
+
+      // Only return if we have a reasonable match (> 30% similarity)
+      return bestScore > 0.3 ? bestMatch : null;
     } catch (error) {
-      throw new Error(`Failed to find event: ${this.getErrorMessage(error)}`);
+      throw new Error(`Failed to find closest event: ${this.getErrorMessage(error)}`);
     }
   }
 

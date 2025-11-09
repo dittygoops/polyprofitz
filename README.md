@@ -1,27 +1,180 @@
-# PolyProfitz
+# PolyProfitz - Sentiment Fade Trading Strategy
 
-CLI tool for fetching and storing Polymarket event data for analysis, modeling, and comparison.
+A full-stack web application + CLI tool for analyzing Polymarket prediction markets to identify mispriced opportunities driven by viral hype spikes. The tool combines Google Trends sentiment analysis with Polymarket price data to generate fade trading signals for mean reversion strategies.
+
+## Overview
+
+**Philosophy:** We're not predicting outcomes. We're arbitraging emotional overreactions by trading volatility caused by viral hype spikes. Buy when public panics in, sell when they calm down.
 
 ## Features
 
-- **Smart Event Search**: Search by event name with automatic slug conversion - no need to format slugs manually
+### Web Application (NEW)
+- 🔍 **Market Search**: Find Polymarket events using natural language queries
+- 📊 **Sentiment Analysis**: Compare Google Trends with price movements
+- 📈 **Price History**: 7-day price charts with hourly granularity
+- 🎯 **Trading Signals**: STRONG BUY, MODERATE, WEAK, or SKIP recommendations
+- 💰 **Return Estimates**: Expected profit calculations based on mean reversion
+- 📉 **Metrics Dashboard**: SVC, PM, VS, OES, RW, and MRI indicators
+
+### CLI Tool (Original)
+- **Smart Event Search**: Search by event name with automatic slug conversion
 - **Fuzzy Matching**: Finds closest matching events even with partial names
-- **Interactive Price Charts**: Automatically generates HTML plots with Plotly.js for data visualization
+- **Interactive Price Charts**: Automatically generates HTML plots with Plotly.js
 - Fetch comprehensive market data from Polymarket API
 - Retrieve price history for all market outcomes (CLOB API integration)
 - Get market tags/categories for each event
 - Filter markets by status (resolved, active, closed, archived)
-- Filter data by custom date ranges
 - Export data to structured JSON files
-- TypeScript support with full type definitions
+
+## How the Web App Works
+
+### 1. Market Search
+User enters a query (e.g., "Trump election 2024"). The backend uses a 3-tier search strategy:
+- Exact slug match
+- Auto-slugified retry
+- Fuzzy search with similarity scoring
+
+### 2. Data Collection
+- Fetches 7-day price history from Polymarket CLOB API
+- Converts market question to Google search query using Claude API
+- Fetches Google Trends interest over time
+
+### 3. Metrics Calculation
+
+| Metric | Formula | Description |
+|--------|---------|-------------|
+| **SVC** | (Trends_Now - Trends_7d) / Trends_7d | Search Volume Change |
+| **PM** | \|Price_Now - Price_7d\| / Price_7d | Price Movement |
+| **VS** | \|Price_24h - Price_7d\| / \|Price_Now - Price_7d\| | Velocity Score |
+| **OES** | \|Price_Now - 0.5\| × 2 | Odds Extremity Score |
+| **RW** | 1.0 if peaked in 24h, else 0.5 | Recency Weight |
+| **MRI** | Category-based (0.6-0.9) | Mean Reversion Indicator |
+
+### 4. Score Calculation
+
+```
+Hype_Ratio = (SVC × PM × VS) / log(MV + 1) × (1 + OES) × RW
+Confidence = min(SVC, PM, MV/10000) × RW
+Trade_Score = Hype_Ratio × MRI × Confidence
+```
+
+### 5. Signal Generation
+
+- **STRONG BUY 🔥**: Trade Score ≥ 0.50
+- **MODERATE ⚠️**: Trade Score ≥ 0.15
+- **WEAK 💤**: Trade Score ≥ 0.05
+- **SKIP 🚫**: Trade Score < 0.05
+
+## API Endpoint
+
+### POST /api/analyze
+
+**Request:**
+```json
+{
+  "query": "Trump election"
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "market": { ... },
+    "scores": { "tradeScore": 0.82, "signal": "STRONG BUY 🔥", ... },
+    "metrics": { "SVC": 6.08, "PM": 1.34, ... },
+    "recommendation": { "action": "BUY NO at 85%", ... },
+    "priceHistory": [ ... ],
+    "trendsHistory": [ ... ]
+  }
+}
+```
+
+## Project Structure
+
+```
+polyprofitz/
+├── backend/              # Express.js REST API
+│   ├── src/
+│   │   ├── server.ts    # Express server
+│   │   ├── routes/      # API routes
+│   │   ├── controllers/ # Request handlers
+│   │   ├── services/    # Business logic (polymarket, trends, claude, metrics)
+│   │   ├── types/       # TypeScript types
+│   │   └── middleware/  # Error handling, validation
+│   └── package.json
+│
+├── frontend/            # React + Vite SPA
+│   ├── src/
+│   │   ├── App.tsx                  # Main app
+│   │   ├── components/              # UI components
+│   │   ├── services/api.ts          # API client
+│   │   └── types/index.ts           # TypeScript types
+│   └── package.json
+│
+└── src/                 # Original CLI tool (still functional)
+```
 
 ## Installation
 
+### Prerequisites
+- Node.js 20+
+- npm or yarn
+- Anthropic API key (for Claude - required for web app)
+
+### Setup
+
+1. **Clone the repository**
+```bash
+git clone <your-repo-url>
+cd polyprofitz
+```
+
+2. **Set up environment variables (for web app)**
+```bash
+cp .env.example .env
+```
+
+Edit `.env` and add your Anthropic API key:
+```
+ANTHROPIC_API_KEY=your_api_key_here
+```
+
+3. **Install dependencies**
+
+For web app:
+```bash
+cd backend && npm install
+cd ../frontend && npm install
+```
+
+For CLI only:
 ```bash
 npm install
 ```
 
-## Usage
+## Running the Web Application
+
+You'll need two terminal windows:
+
+**Terminal 1 - Backend:**
+```bash
+cd backend
+npm run dev
+```
+Backend runs on `http://localhost:3001`
+
+**Terminal 2 - Frontend:**
+```bash
+cd frontend
+npm run dev
+```
+Frontend runs on `http://localhost:5173`
+
+Open your browser to `http://localhost:5173`
+
+## Usage (CLI Tool)
 
 ### Fetch Event Data
 
