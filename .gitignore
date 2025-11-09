@@ -3,6 +3,8 @@ node_modules/
 
 # Build output
 dist/
+frontend/dist/
+*.tsbuildinfo
 
 # Data files
 data/

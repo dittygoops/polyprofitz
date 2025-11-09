@@ -31,6 +31,7 @@ export interface Token {
 export interface PricePoint {
   t: number; // Unix timestamp
   p: string; // Price as string
+  v?: number; // Optional volume
 }
 
 export interface PriceHistory {

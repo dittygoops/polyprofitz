@@ -1,0 +1,23 @@
+To set up your environment variables:
+
+1. Create a file named ".env" in the root directory of the project
+
+2. Add the following content to the .env file:
+
+ANTHROPIC_API_KEY=your_anthropic_api_key_here
+PORT=3001
+DEBUG=false
+
+3. Replace "your_anthropic_api_key_here" with your actual Anthropic API key
+
+4. Get your Anthropic API key from: https://console.anthropic.com/
+
+Example .env file:
+--------------------
+ANTHROPIC_API_KEY=sk-ant-api03-xxxxxxxxxxxxxxxxxxxxx
+PORT=3001
+DEBUG=false
+--------------------
+
+Important: Never commit the .env file to git (it's already in .gitignore)
+

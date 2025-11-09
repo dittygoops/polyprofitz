@@ -1,215 +1,328 @@
-# PolyProfitz
+# Polymarket Sentiment Fade Trading Strategy
 
-CLI tool for fetching and storing Polymarket event data for analysis, modeling, and comparison.
+A comprehensive tool that identifies mispriced Polymarket markets driven by viral hype spikes. The strategy: Buy against public sentiment when hype peaks, sell when sentiment normalizes (2-7 day hold), profit from mean reversion regardless of actual outcome.
 
-## Features
+## 🎯 Strategy Overview
 
-- **Smart Event Search**: Search by event name with automatic slug conversion - no need to format slugs manually
-- **Fuzzy Matching**: Finds closest matching events even with partial names
-- **Interactive Price Charts**: Automatically generates HTML plots with Plotly.js for data visualization
-- Fetch comprehensive market data from Polymarket API
-- Retrieve price history for all market outcomes (CLOB API integration)
-- Get market tags/categories for each event
-- Filter markets by status (resolved, active, closed, archived)
-- Filter data by custom date ranges
-- Export data to structured JSON files
-- TypeScript support with full type definitions
+**Philosophy**: We're not predicting outcomes. We're arbitraging emotional overreactions by trading volatility caused by viral hype spikes. Buy when public panics in, sell when they calm down.
 
-## Installation
+### Core Formula
+
+```
+Trade_Score = Hype_Ratio × MRI × Confidence
+Hype_Ratio = (SVC × PM × VS) / log(MV + 1) × (1 + OES) × RW
+Confidence = min(SVC, PM, MV/10000) × RW
+```
+
+### Signal Strength
+- **STRONG BUY 🔥** (≥0.50): High-confidence mispricing opportunity
+- **MODERATE ⚠️** (≥0.15): Worth investigating
+- **WEAK 💤** (≥0.05): Low confidence
+- **SKIP 🚫** (<0.05): No significant opportunity
+
+## 🏗️ Architecture
+
+```
+User Query → Backend API → PolymarketClient.findClosestEvent() 
+           → Fetch Price History → Extract Category → Claude API (search query)
+           → Google Trends → Calculate Metrics → Return Analysis → Frontend Display
+```
+
+## 📋 Prerequisites
+
+- Node.js v18+ 
+- npm or yarn
+- Anthropic API Key (for Claude)
+
+## 🚀 Installation
+
+### 1. Clone and Install Dependencies
 
 ```bash
+# Fix npm cache issues (if needed)
+sudo chown -R $(whoami) ~/.npm
+
+# Install backend dependencies
 npm install
+
+# Install frontend dependencies
+cd frontend
+npm install
+cd ..
 ```
 
-## Usage
+### 2. Configure Environment Variables
 
-### Fetch Event Data
-
-Fetch all data for an event by name or slug. The tool automatically handles formatting:
+Create a `.env` file in the root directory:
 
 ```bash
-npm run dev -- fetch-event <event-name>
+# Anthropic API Key (required)
+ANTHROPIC_API_KEY=your_anthropic_api_key_here
+
+# Server Configuration
+PORT=3001
+
+# Optional: Enable debug logging
+DEBUG=false
 ```
 
-**Examples (all formats work):**
+Get your Anthropic API key from: https://console.anthropic.com/
+
+## 🎮 Usage
+
+### Running the Application
+
+#### Option 1: Development Mode (Recommended)
+
+Run backend and frontend in separate terminals:
 
 ```bash
-# Natural language with spaces
-npm run dev -- fetch-event "Presidential Election Winner 2024"
+# Terminal 1: Start backend server
+npm run server:dev
 
-# Slug format
-npm run dev -- fetch-event presidential-election-winner-2024
-
-# Partial matches (uses fuzzy search)
-npm run dev -- fetch-event "NBA Competitor" --status active
-
-# Special characters are auto-removed
-npm run dev -- fetch-event "Trump Election!!!"
+# Terminal 2: Start frontend dev server
+cd frontend
+npm run dev
 ```
 
-### Options
+Then open http://localhost:3000 in your browser.
 
-- `-s, --start-date <date>` - Start date for historical data (ISO format or common date format)
-- `-e, --end-date <date>` - End date for historical data (ISO format or common date format)
-- `-o, --output <path>` - Output directory for JSON file (default: `./data`)
-- `--status <status>` - Market status filter: `active`, `closed`, `resolved`, or `archived` (default: `resolved`)
-
-**Examples with options:**
+#### Option 2: Production Build
 
 ```bash
-# Fetch resolved (older/completed) events - this is the default
-npm run dev -- fetch-event "Presidential Election" --status resolved
-
-# Fetch active (ongoing) events
-npm run dev -- fetch-event "NBA Competitor" --status active
-
-# Fetch data from a specific date range
-npm run dev -- fetch-event presidential-election-2024 -s "2024-01-01" -e "2024-12-31"
-
-# Custom output directory
-npm run dev -- fetch-event "Presidential Election" -o ./my-data
-
-# Combine options: resolved market with date range and custom output
-npm run dev -- fetch-event "Presidential Election 2024" --status resolved -s "2024-01-01" -e "2024-12-31" -o ./data
-```
-
-### Build and Run (Production)
-
-```bash
-# Build the project
+# Build backend
 npm run build
 
-# Run the compiled version
-npm start fetch-event "Presidential Election 2024"
+# Build frontend
+cd frontend
+npm run build
+cd ..
+
+# Start backend server
+npm run server
+
+# Serve frontend (using a static server)
+npx serve frontend/dist -p 3000
 ```
 
-## Output Format
+### Using the API Directly
 
-The tool saves data to JSON files with the following structure:
+```bash
+# Analyze a market
+curl -X POST http://localhost:3001/api/analyze \
+  -H "Content-Type: application/json" \
+  -d '{"query": "Trump election 2024"}'
 
-```json
-{
-  "market": {
-    "id": "253591",
-    "question": "Will Donald Trump win the 2024 US Presidential Election?",
-    "conditionId": "0xdd22472e552920b8438158ea7238bfadfa4f736aa4cee91a6b86c39ead110917",
-    "slug": "will-donald-trump-win-the-2024-us-presidential-election",
-    "description": "Market description...",
-    "outcomes": "[\"Yes\", \"No\"]",
-    "volume": "1531479284.504353",
-    "closed": true,
-    "clobTokenIds": "[\"21742633143463906290569050155826241533067272736897614950488156847949938836455\", \"48331043336612883890938759509493159234755048973500640148014422747788308965732\"]",
-    "tags": [
-      {
-        "id": "126",
-        "label": "Trump",
-        "slug": "trump"
-      },
-      {
-        "id": "2",
-        "label": "Politics",
-        "slug": "politics"
-      }
-    ]
-  },
-  "tokens": [
-    {
-      "tokenId": "21742633143463906290569050155826241533067272736897614950488156847949938836455",
-      "outcome": "Yes",
-      "priceHistory": [
-        { "t": 1704412803, "p": 0.5 },
-        { "t": 1704456003, "p": 0.405 }
-      ],
-      "trades": [],
-      "volumeMetrics": {
-        "total_volume": "0",
-        "trade_count": 0
-      }
-    }
-  ],
-  "fetchedAt": "2025-01-08T16:02:06.000Z",
-  "timeRange": {
-    "start": null,
-    "end": null
-  }
-}
+# Health check
+curl http://localhost:3001/health
+
+# Get example queries
+curl http://localhost:3001/api/examples
 ```
 
-### Key Fields
+### Example Queries
 
-- **market.tags**: Array of category/tag objects with id, label, and slug
-- **market.clobTokenIds**: Token IDs used for price history queries
-- **tokens[].priceHistory**: Time-series price data (t = Unix timestamp, p = price 0-1)
-- **fetchedAt**: Timestamp when data was retrieved
-- **timeRange**: Date range used for filtering (null = all historical data)
+- `Trump election 2024`
+- `Bitcoin price 100k`
+- `Fed rate decision December`
+- `Super Bowl winner`
+- `Ethereum ETF approval`
 
-## File Naming
+## 📊 Metrics Explained
 
-Output files are automatically named with the format:
+### Raw Data Metrics
 
-**JSON Data:**
-```
-<market-slug>_<timestamp>.json
-```
-Example: `trump-2024-election_2024-01-15_14-30-45.json`
+1. **Current_Price** - Latest YES price (0-1) from price history
+2. **Price_7d_Ago** - Price 7 days ago
+3. **Price_24h_Ago** - Price 24 hours ago
+4. **Market_Volume** - Sum of all volume over 7 days
+5. **Market_Category** - Extracted from tags (politics, sports, crypto, entertainment, other)
+6. **Trends_Current** - Google Trends search volume now (0-100)
+7. **Trends_7d_Ago** - Google Trends search volume 7 days ago
 
-**HTML Plots:**
-```
-<market-slug>_<timestamp>_plot.html
-```
-Example: `trump-2024-election_2024-01-15T14-30-45_plot.html`
+### Calculated Metrics
 
-Open the HTML file in any web browser to view an interactive price chart with:
-- Multiple outcome traces (e.g., "Yes" vs "No")
-- Hover-over tooltips showing exact prices and timestamps
-- Zoom and pan controls
-- Market metadata (ID, status, tags, volume, etc.)
+8. **SVC** (Search Volume Change) = `(Trends_Current - Trends_7d_Ago) / Trends_7d_Ago`
+9. **PM** (Price Movement) = `|Current_Price - Price_7d_Ago| / Price_7d_Ago`
+10. **VS** (Velocity Score) = `|Price_24h_Ago - Price_7d_Ago| / |Current_Price - Price_7d_Ago|`
+11. **OES** (Odds Extremity Score) = `|Current_Price - 0.50| × 2`
+12. **RW** (Recency Weight) = `1.0` if Trends peaked in last 24h, else `0.5`
+13. **MRI** (Mean Reversion Indicator) - Mapped by category:
+    - politics: 0.8
+    - sports: 0.6
+    - crypto: 0.9
+    - entertainment: 0.7
+    - other: 0.7
 
-## Project Structure
+## 🔧 Tech Stack
+
+### Backend
+- **Runtime**: Node.js + TypeScript
+- **Framework**: Express.js
+- **APIs**: 
+  - Polymarket API (market data)
+  - Anthropic Claude API (search query extraction)
+  - Google Trends API (sentiment data)
+
+### Frontend
+- **Framework**: React 18 + TypeScript
+- **Build Tool**: Vite
+- **Styling**: Tailwind CSS
+- **HTTP Client**: Axios
+
+## 📁 Project Structure
 
 ```
 polyprofitz/
 ├── src/
-│   ├── index.ts              # Main CLI entry point
-│   ├── commands/
-│   │   └── fetch-event.ts    # Event fetching command
 │   ├── api/
-│   │   └── polymarket.ts     # Polymarket API client
+│   │   └── polymarket.ts          # Polymarket API client
+│   ├── services/
+│   │   └── market-analysis.ts     # Core analysis logic
 │   ├── types/
-│   │   └── polymarket.ts     # TypeScript type definitions
-│   └── utils/
-│       ├── time.ts           # Date/time utilities
-│       ├── storage.ts        # JSON file storage utilities
-│       └── plot.ts           # Price chart generation
-├── data/                     # Default output directory (JSON + HTML)
+│   │   ├── polymarket.ts          # Polymarket type definitions
+│   │   └── market-analysis.ts     # Analysis type definitions
+│   ├── server.ts                  # Express server
+│   └── index.ts                   # CLI entry point
+├── frontend/
+│   ├── src/
+│   │   ├── App.tsx                # Main React component
+│   │   ├── main.tsx               # React entry point
+│   │   ├── types.ts               # Frontend type definitions
+│   │   └── index.css              # Global styles
+│   ├── index.html
+│   ├── vite.config.ts
+│   └── package.json
+├── data/                          # Stored analysis results
+├── dist/                          # Compiled JavaScript
 ├── package.json
-└── tsconfig.json
+├── tsconfig.json
+└── README.md
 ```
 
-## How It Works
+## 🎯 API Endpoints
 
-### Search Strategy
+### POST /api/analyze
+Analyze a Polymarket market by query.
 
-1. **Exact Slug Match**: Tries the input as-is first
-2. **Auto-Slugify**: Converts input to slug format (lowercase, hyphens, no special chars)
-3. **Fuzzy Search**: Searches all events and returns closest match based on title/slug similarity
+**Request:**
+```json
+{
+  "query": "Trump election 2024"
+}
+```
 
-### API Endpoints Used
+**Response:**
+```json
+{
+  "market": {
+    "title": "Presidential Election Winner 2024",
+    "question": "Will Donald Trump win the 2024 US Presidential Election?",
+    "slug": "will-donald-trump-win-the-2024-us-presidential-election",
+    "category": "politics",
+    "eventSlug": "presidential-election-winner-2024"
+  },
+  "scores": {
+    "tradeScore": 0.82,
+    "hypeRatio": 1.45,
+    "confidence": 0.67,
+    "signal": "STRONG BUY 🔥"
+  },
+  "metrics": {
+    "svc": 6.08,
+    "pm": 1.34,
+    "vs": 0.74,
+    "oes": 0.70,
+    "rw": 1.0,
+    "mri": 0.8
+  },
+  "prices": {
+    "current": 0.85,
+    "sevenDaysAgo": 0.45,
+    "twentyFourHoursAgo": 0.72
+  },
+  "trends": {
+    "current": 92,
+    "sevenDaysAgo": 13,
+    "searchQuery": "Trump election"
+  },
+  "recommendation": {
+    "action": "BUY NO at 85%",
+    "targetExit": "Price reverts 50% in 2-4 days",
+    "expectedReturn": "41% return"
+  },
+  "volume": 2500000
+}
+```
 
-**Gamma API** (`https://gamma-api.polymarket.com`):
-- `GET /events/slug/{slug}` - Get event by exact slug
-- `GET /events` - Search/list events with filters
-- `GET /markets/{id}` - Get detailed market information
-- `GET /markets/{id}/tags` - Get market categories/tags
+### GET /health
+Health check endpoint.
 
-**CLOB API** (`https://clob.polymarket.com`):
-- `GET /prices-history` - Fetch historical price data with fidelity controls
+### GET /api/examples
+Get example search queries.
 
-## Requirements
+## 🐛 Troubleshooting
 
-- Node.js 16+
-- npm or yarn
+### npm install fails with permission errors
+```bash
+sudo chown -R $(whoami) ~/.npm
+```
 
-## License
+### Backend fails to start
+- Check that `.env` file exists with `ANTHROPIC_API_KEY`
+- Ensure port 3001 is not in use
+- Verify all dependencies are installed
+
+### Frontend can't connect to backend
+- Ensure backend is running on port 3001
+- Check Vite proxy configuration in `frontend/vite.config.ts`
+- Verify CORS is enabled in backend
+
+### Google Trends API errors
+- Google Trends API has rate limits
+- If requests fail, the system will return SVC=0 and continue analysis
+- Consider adding caching for production use
+
+### No matching market found
+- Try different query terms
+- Check if market is still active (not closed)
+- Verify Polymarket API is accessible
+
+## 🔒 Security Notes
+
+- Keep your `.env` file private (already in `.gitignore`)
+- Never commit API keys to version control
+- Use environment variables for all sensitive data
+- Consider rate limiting in production
+
+## 📈 Future Enhancements
+
+- [ ] Add caching layer for repeated queries
+- [ ] Implement historical performance tracking
+- [ ] Add portfolio management features
+- [ ] Create backtesting framework
+- [ ] Add real-time price alerts
+- [ ] Implement automated trading (with user approval)
+- [ ] Add more visualization charts
+- [ ] Support multiple markets comparison
+- [ ] Add user authentication and saved searches
+
+## 📄 License
 
 MIT
+
+## 🤝 Contributing
+
+Contributions welcome! Please feel free to submit a Pull Request.
+
+## ⚠️ Disclaimer
+
+This tool is for educational and research purposes only. Trading prediction markets involves risk. Past performance does not guarantee future results. Always do your own research and never invest more than you can afford to lose.
+
+## 📞 Support
+
+For issues, questions, or suggestions, please open an issue on GitHub.
+
+---
+
+**Built with ❤️ for the Polymarket community**
