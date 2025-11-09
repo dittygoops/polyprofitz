@@ -71,7 +71,7 @@ export async function fetchEventCommand(
         const closedFilter = options.status === 'resolved' || options.status === 'closed';
         event = await client.findClosestEvent(eventSlugOrQuery, {
           closed: closedFilter,
-          limit: 100
+          limit: 1000  // Increased from 100 to search more events
         });
       }
     } else {
@@ -80,7 +80,7 @@ export async function fetchEventCommand(
       const closedFilter = options.status === 'resolved' || options.status === 'closed';
       event = await client.findClosestEvent(eventSlugOrQuery, {
         closed: closedFilter,
-        limit: 100
+        limit: 1000  // Increased from 100 to search more events
       });
     }
   }

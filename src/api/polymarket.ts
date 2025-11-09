@@ -183,29 +183,64 @@ export class PolymarketClient {
   }
 
   /**
-   * Calculate similarity score between two strings (simple Levenshtein-like approach)
+   * Calculate similarity score between two strings with improved word matching
    */
   private calculateSimilarity(str1: string, str2: string): number {
-    const s1 = str1.toLowerCase();
-    const s2 = str2.toLowerCase();
+    const s1 = str1.toLowerCase().trim();
+    const s2 = str2.toLowerCase().trim();
 
     // Exact match
     if (s1 === s2) return 1.0;
 
     // Contains match
-    if (s1.includes(s2) || s2.includes(s1)) return 0.8;
+    if (s1.includes(s2) || s2.includes(s1)) return 0.9;
 
-    // Word overlap
-    const words1 = s1.split(/\s+/);
-    const words2 = s2.split(/\s+/);
-    const commonWords = words1.filter(w => words2.includes(w));
-    const wordOverlap = commonWords.length / Math.max(words1.length, words2.length);
+    // Word overlap with stop word filtering and possessive handling
+    const stopWords = new Set(['the', 'a', 'an', 'in', 'on', 'at', 'to', 'for', 'of', 'will', 'be', 'is', 'are', '?', 'by', 'if']);
+    
+    // Remove possessives ('s) and punctuation for better matching
+    const cleanWord = (w: string) => w.replace(/['']s$/, '').replace(/[^a-z0-9]/g, '');
+    
+    const words1 = s1.split(/\s+/)
+      .map(cleanWord)
+      .filter(w => w.length > 0 && !stopWords.has(w));
+    const words2 = s2.split(/\s+/)
+      .map(cleanWord)
+      .filter(w => w.length > 0 && !stopWords.has(w));
+    
+    if (words1.length === 0 || words2.length === 0) return 0;
 
-    return wordOverlap * 0.6;
+    // Count matching words (exact or partial matches for word variations)
+    let matchCount = 0;
+    for (const w1 of words1) {
+      for (const w2 of words2) {
+        // Exact match
+        if (w1 === w2) {
+          matchCount++;
+          break;
+        }
+        // Partial match for word stems (e.g., "rule" matches "rules")
+        if (w1.length >= 4 && w2.length >= 4) {
+          const stem1 = w1.substring(0, Math.min(w1.length - 1, 5));
+          const stem2 = w2.substring(0, Math.min(w2.length - 1, 5));
+          if (stem1 === stem2) {
+            matchCount += 0.9; // Slightly lower score for partial match
+            break;
+          }
+        }
+      }
+    }
+    
+    // Calculate score based on proportion of matching important words
+    const score1 = matchCount / words1.length;
+    const score2 = matchCount / words2.length;
+    
+    // Use average of both proportions
+    return (score1 + score2) / 2;
   }
 
   /**
-   * Search for events by exact slug match
+   * Search for events and find the closest match using fuzzy matching
    */
   async findClosestEvent(query: string, searchParams?: EventSearchParams): Promise<Event | null> {
     try {
@@ -214,9 +249,83 @@ export class PolymarketClient {
         const event = await this.getEventBySlug(query);
         return event;
       } catch (error) {
-        // If exact slug fails, return null
+        // If exact slug fails, do fuzzy search
+        console.log('Exact slug failed, doing fuzzy search across all events...');
+      }
+
+      // Fetch all events without keyword filtering
+      // API search is too aggressive and filters out good matches
+      console.log('Fetching all active events for local fuzzy matching...');
+      
+      const params = {
+        ...searchParams,
+        limit: searchParams?.limit || 1000, // Fetch more events by default
+        // Don't use API search - it filters out too many good matches
+      };
+      const events = await this.searchEvents(params);
+      
+      if (events.length === 0) {
+        console.log('No events found to search');
         return null;
       }
+
+      console.log(`Searching through ${events.length} events for best match...`);
+
+      // Calculate similarity for each event
+      const matches: Array<{ event: Event; textScore: number; volumeScore: number; finalScore: number }> = [];
+
+      // Find max volume for normalization
+      let maxVolume = 0;
+      for (const event of events) {
+        const volume = parseFloat(String(event.volume || 0));
+        if (volume > maxVolume) maxVolume = volume;
+      }
+
+      for (const event of events) {
+        // Check similarity against title and slug
+        const titleScore = this.calculateSimilarity(query, event.title || '');
+        const slugScore = this.calculateSimilarity(query, event.slug || '');
+        const textScore = Math.max(titleScore, slugScore);
+
+        // Calculate volume score (normalized 0-1)
+        const volume = parseFloat(String(event.volume || 0));
+        const volumeScore = maxVolume > 0 ? volume / maxVolume : 0;
+
+        // Combined score: 85% text similarity, 15% volume
+        // Volume helps break ties but doesn't override good text matches
+        const finalScore = (textScore * 0.85) + (volumeScore * 0.15);
+
+        matches.push({ event, textScore, volumeScore, finalScore });
+        
+        // Debug: Show scoring for events containing "trump" and "tariff"
+        const titleLower = (event.title || '').toLowerCase();
+        if (titleLower.includes('trump') && titleLower.includes('tariff')) {
+          console.log(`  DEBUG: "${event.title}" → ${(finalScore * 100).toFixed(1)}% (text: ${(textScore * 100).toFixed(1)}%, volume: ${(volumeScore * 100).toFixed(1)}%, vol: $${(volume / 1000000).toFixed(2)}M)`);
+        }
+      }
+
+      // Sort by final score descending
+      matches.sort((a, b) => b.finalScore - a.finalScore);
+
+      // Show top 5 matches for debugging
+      console.log('\nTop 5 matches:');
+      for (let i = 0; i < Math.min(5, matches.length); i++) {
+        const match = matches[i];
+        const volume = parseFloat(String(match.event.volume || 0));
+        console.log(`  ${i + 1}. "${match.event.title}" (${(match.finalScore * 100).toFixed(1)}%)`);
+        console.log(`      Text: ${(match.textScore * 100).toFixed(1)}%, Volume: $${(volume / 1000000).toFixed(2)}M, Slug: ${match.event.slug}`);
+      }
+
+      // Always return the best match (no threshold)
+      if (matches.length > 0 && matches[0].finalScore > 0) {
+        const winner = matches[0];
+        const volume = parseFloat(String(winner.event.volume || 0));
+        console.log(`\nSelected: "${winner.event.title}" (text: ${(winner.textScore * 100).toFixed(1)}%, volume: $${(volume / 1000000).toFixed(2)}M)`);
+        return winner.event;
+      }
+
+      console.log('No events available to match');
+      return null;
     } catch (error) {
       throw new Error(`Failed to find event: ${this.getErrorMessage(error)}`);
     }

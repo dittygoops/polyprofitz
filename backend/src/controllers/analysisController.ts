@@ -72,7 +72,9 @@ export class AnalysisController {
           },
           {
             current: trendsResult.current,
+            twentyFourHoursAgo: trendsResult.twentyFourHoursAgo,
             sevenDaysAgo: trendsResult.sevenDaysAgo,
+            history: trendsResult.history,
           },
           marketVolume,
           mri
@@ -82,7 +84,7 @@ export class AnalysisController {
         const scores = this.metricsService.calculateScores(metrics, marketVolume);
 
         // Generate recommendation for this outcome
-        const recommendation = this.metricsService.generateRecommendation(scores.tradeScore, currentPrice);
+        const recommendation = this.metricsService.generateRecommendation(scores.tradeScore, currentPrice, metrics);
 
         // Add to analyses array
         outcomeAnalyses.push({

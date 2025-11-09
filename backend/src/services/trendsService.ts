@@ -2,6 +2,7 @@ import googleTrends from 'google-trends-api';
 
 export interface TrendsResult {
   current: number;
+  twentyFourHoursAgo: number;
   sevenDaysAgo: number;
   history: Array<{ t: number; v: number }>;
 }
@@ -26,6 +27,7 @@ export class TrendsService {
         console.warn(`No Google Trends data for keyword: ${keyword}`);
         return {
           current: 0,
+          twentyFourHoursAgo: 0,
           sevenDaysAgo: 0,
           history: [],
         };
@@ -37,12 +39,16 @@ export class TrendsService {
         v: point.value[0] || 0,
       }));
 
-      // Get current and 7 days ago values
+      // Get current, 24h ago, and 7 days ago values
       const current = timelineData[timelineData.length - 1]?.value[0] || 0;
+      const twentyFourHoursAgo = timelineData.length >= 24
+        ? timelineData[timelineData.length - 24]?.value[0] || 0
+        : current; // Fallback to current if not enough data
       const sevenDaysAgo = timelineData[0]?.value[0] || 0;
 
       return {
         current,
+        twentyFourHoursAgo,
         sevenDaysAgo,
         history,
       };
@@ -52,6 +58,7 @@ export class TrendsService {
       // Return zeros instead of failing completely
       return {
         current: 0,
+        twentyFourHoursAgo: 0,
         sevenDaysAgo: 0,
         history: [],
       };

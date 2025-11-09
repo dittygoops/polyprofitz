@@ -8,7 +8,9 @@ export interface PriceInput {
 
 export interface TrendsInput {
   current: number;
+  twentyFourHoursAgo: number;
   sevenDaysAgo: number;
+  history: Array<{ t: number; v: number }>;
 }
 
 export class MetricsService {
@@ -18,15 +20,20 @@ export class MetricsService {
     marketVolume: number,
     mri: number
   ): Metrics {
-    // SVC (Search Volume Change)
-    const SVC = trends.sevenDaysAgo === 0
-      ? 0
-      : (trends.current - trends.sevenDaysAgo) / trends.sevenDaysAgo;
+    // SVC (Search Volume Change) - Dual Window
+    // Short-term spike (24h) weighted 60%, long-term trend (7d) weighted 40%
+    const SVC_24h = (trends.current - trends.twentyFourHoursAgo) / (trends.twentyFourHoursAgo || 1);
+    const SVC_7d = (trends.current - trends.sevenDaysAgo) / (trends.sevenDaysAgo || 1);
+    const SVC = (SVC_24h * 0.6) + (SVC_7d * 0.4);
 
     // PM (Price Movement)
-    const PM = prices.sevenDaysAgo === 0
-      ? 0
-      : Math.abs(prices.current - prices.sevenDaysAgo) / prices.sevenDaysAgo;
+    // Handle division by zero: if baseline was 0 but current > 0, use current as 100% move
+    let PM: number;
+    if (prices.sevenDaysAgo === 0) {
+      PM = prices.current > 0 ? prices.current : 0;
+    } else {
+      PM = Math.abs(prices.current - prices.sevenDaysAgo) / prices.sevenDaysAgo;
+    }
 
     // VS (Velocity Score)
     const priceDelta = Math.abs(prices.current - prices.sevenDaysAgo);
@@ -38,8 +45,11 @@ export class MetricsService {
     const OES = Math.abs(prices.current - 0.5) * 2;
 
     // RW (Recency Weight)
-    // If trend peaked in last 24h (current >= 90% of max)
-    const maxTrend = Math.max(trends.current, trends.sevenDaysAgo);
+    // If current trend is within 90% of max over entire 7-day period, RW = 1.0, else 0.5
+    const allTrendValues = trends.history.map(p => p.v);
+    const maxTrend = allTrendValues.length > 0 
+      ? Math.max(...allTrendValues)
+      : trends.current;
     const RW = trends.current >= maxTrend * 0.9 ? 1.0 : 0.5;
 
     // MRI (Mean Reversion Indicator) - passed in from category
@@ -80,16 +90,17 @@ export class MetricsService {
 
   generateRecommendation(
     tradeScore: number,
-    currentPrice: number
+    currentPrice: number,
+    metrics?: Metrics
   ): Recommendation {
     const pricePercent = (currentPrice * 100).toFixed(0);
 
-    // Calculate expected return (simplified)
-    const targetPrice = currentPrice > 0.5
-      ? currentPrice * 0.5  // Expect 50% reversion if overvalued
-      : currentPrice * 1.5; // Expect 50% increase if undervalued
-
-    const expectedReturn = Math.abs((targetPrice - currentPrice) / currentPrice * 100).toFixed(0);
+    // Calculate expected return based on multiple factors
+    const { expectedReturn, targetPrice, reversionPercent } = this.calculateExpectedReturn(
+      tradeScore,
+      currentPrice,
+      metrics
+    );
 
     let action: string;
     let targetExit: string;
@@ -99,12 +110,12 @@ export class MetricsService {
       action = currentPrice > 0.5
         ? `BUY NO at ${pricePercent}%`
         : `BUY YES at ${pricePercent}%`;
-      targetExit = 'Price reverts 50% in 2-5 days';
+      targetExit = `Price reverts ${reversionPercent}% in 2-5 days`;
     } else if (tradeScore >= 0.15) {
       action = currentPrice > 0.5
         ? `CONSIDER NO at ${pricePercent}%`
         : `CONSIDER YES at ${pricePercent}%`;
-      targetExit = 'Price reverts 30% in 3-7 days';
+      targetExit = `Price reverts ${reversionPercent}% in 3-7 days`;
     } else {
       action = 'SKIP - Insufficient signal';
       targetExit = 'Wait for stronger setup';
@@ -114,6 +125,67 @@ export class MetricsService {
       action,
       targetExit,
       expectedReturn: `${expectedReturn}% return`,
+    };
+  }
+
+  private calculateExpectedReturn(
+    tradeScore: number,
+    currentPrice: number,
+    metrics?: Metrics
+  ): { expectedReturn: number; targetPrice: number; reversionPercent: number } {
+    // Calculate price extremity (0 to 1, where 1 is most extreme)
+    const priceExtremity = Math.abs(currentPrice - 0.5) * 2;
+
+    // Base reversion percentage: more extreme prices revert more
+    // Prices near 0.5 revert less (20-30%), extreme prices revert more (60-80%)
+    let baseReversionPercent = 20 + (priceExtremity * 60);
+
+    // Trade score multiplier: stronger signals expect stronger reversion
+    // tradeScore 0.5+ → 1.2x multiplier
+    // tradeScore 0.15-0.5 → 0.8x multiplier
+    // tradeScore < 0.15 → 0.5x multiplier
+    let scoreMultiplier = 1.0;
+    if (tradeScore >= 0.5) {
+      scoreMultiplier = 1.0 + (tradeScore * 0.4); // 1.2 to 1.4x
+    } else if (tradeScore >= 0.15) {
+      scoreMultiplier = 0.8 + (tradeScore * 0.8); // 0.8 to 1.0x
+    } else {
+      scoreMultiplier = 0.5 + (tradeScore * 2); // 0.5 to 0.8x
+    }
+
+    // Factor in hype ratio if available
+    if (metrics) {
+      const { SVC, PM, OES } = metrics;
+      
+      // Higher search volume change = stronger reversion potential
+      if (SVC > 0.5) {
+        scoreMultiplier *= 1.1;
+      }
+      
+      // Higher price movement = more volatile, expect more reversion
+      if (PM > 0.3) {
+        baseReversionPercent *= 1.1;
+      }
+      
+      // More extreme odds = more room to revert
+      baseReversionPercent *= (1 + OES * 0.2);
+    }
+
+    // Calculate final reversion percentage (cap between 15% and 85%)
+    const reversionPercent = Math.min(85, Math.max(15, Math.round(baseReversionPercent * scoreMultiplier)));
+
+    // Calculate target price based on reversion toward 0.5
+    const distanceFrom50 = currentPrice - 0.5;
+    const reversionAmount = distanceFrom50 * (reversionPercent / 100);
+    const targetPrice = currentPrice - reversionAmount;
+
+    // Calculate expected return
+    const expectedReturn = Math.round(Math.abs((targetPrice - currentPrice) / currentPrice * 100));
+
+    return {
+      expectedReturn,
+      targetPrice,
+      reversionPercent,
     };
   }
 
