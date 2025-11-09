@@ -18,6 +18,7 @@ export interface TrendsData {
   current: number;
   sevenDaysAgo: number;
   searchQuery: string;
+  history: TrendsPoint[];
 }
 
 export interface Metrics {

@@ -116,6 +116,7 @@ export class AnalysisController {
             current: trendsResult.current,
             sevenDaysAgo: trendsResult.sevenDaysAgo,
             searchQuery,
+            history: trendsResult.history,
           },
           outcomes: outcomeAnalyses,
           volume: marketVolume,

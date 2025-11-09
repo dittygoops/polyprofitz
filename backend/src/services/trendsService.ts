@@ -1,5 +1,4 @@
 import googleTrends from 'google-trends-api';
-import { AppError } from '../middleware/errorHandler';
 
 export interface TrendsResult {
   current: number;

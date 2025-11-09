@@ -47,7 +47,7 @@ export const AnalysisResults: React.FC<AnalysisResultsProps> = ({ data }) => {
       {/* Google Trends Chart */}
       <div className="bg-white rounded-lg shadow-lg p-6 border border-gray-200">
         <h2 className="text-xl font-bold text-gray-900 mb-4">Market Sentiment (Google Trends)</h2>
-        <TrendsChart data={[]} searchQuery={trends.searchQuery} />
+        <TrendsChart data={trends.history || []} searchQuery={trends.searchQuery} />
         <div className="grid grid-cols-2 gap-4 mt-4">
           <div className="text-center p-3 bg-gray-50 rounded-lg">
             <p className="text-sm text-gray-600">Current Interest</p>
