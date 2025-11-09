@@ -22,10 +22,11 @@
   "dependencies": {
     "axios": "^1.6.2",
     "commander": "^11.1.0",
-    "date-fns": "^3.0.0"
+    "date-fns": "^3.0.0",
+    "plotly.js-dist-min": "^3.2.0"
   },
   "devDependencies": {
-    "@types/node": "^20.10.5",
+    "@types/node": "^20.19.24",
     "ts-node": "^10.9.2",
     "typescript": "^5.3.3"
   }

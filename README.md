@@ -6,6 +6,7 @@ CLI tool for fetching and storing Polymarket event data for analysis, modeling, 
 
 - **Smart Event Search**: Search by event name with automatic slug conversion - no need to format slugs manually
 - **Fuzzy Matching**: Finds closest matching events even with partial names
+- **Interactive Price Charts**: Automatically generates HTML plots with Plotly.js for data visualization
 - Fetch comprehensive market data from Polymarket API
 - Retrieve price history for all market outcomes (CLOB API integration)
 - Get market tags/categories for each event
@@ -145,11 +146,24 @@ The tool saves data to JSON files with the following structure:
 ## File Naming
 
 Output files are automatically named with the format:
+
+**JSON Data:**
 ```
 <market-slug>_<timestamp>.json
 ```
-
 Example: `trump-2024-election_2024-01-15_14-30-45.json`
+
+**HTML Plots:**
+```
+<market-slug>_<timestamp>_plot.html
+```
+Example: `trump-2024-election_2024-01-15T14-30-45_plot.html`
+
+Open the HTML file in any web browser to view an interactive price chart with:
+- Multiple outcome traces (e.g., "Yes" vs "No")
+- Hover-over tooltips showing exact prices and timestamps
+- Zoom and pan controls
+- Market metadata (ID, status, tags, volume, etc.)
 
 ## Project Structure
 
@@ -165,8 +179,9 @@ polyprofitz/
 │   │   └── polymarket.ts     # TypeScript type definitions
 │   └── utils/
 │       ├── time.ts           # Date/time utilities
-│       └── storage.ts        # JSON file storage utilities
-├── data/                     # Default output directory
+│       ├── storage.ts        # JSON file storage utilities
+│       └── plot.ts           # Price chart generation
+├── data/                     # Default output directory (JSON + HTML)
 ├── package.json
 └── tsconfig.json
 ```

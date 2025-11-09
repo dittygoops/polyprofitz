@@ -17,7 +17,7 @@ program
   .option('-s, --start-date <date>', 'Start date for historical data (ISO format or common date format)')
   .option('-e, --end-date <date>', 'End date for historical data (ISO format or common date format)')
   .option('-o, --output <path>', 'Output directory for JSON file (default: ./data)')
-  .option('--status <status>', 'Market status filter (active, closed, resolved, archived)', 'resolved')
+  .option('--status <status>', 'Market status filter (active, closed, resolved, archived)', 'active')
   .action(async (marketSlug: string, options) => {
     try {
       await fetchEventCommand(marketSlug, options);

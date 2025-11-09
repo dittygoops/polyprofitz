@@ -7,6 +7,8 @@ import {
 } from '../types/polymarket';
 import { parseDate, formatISO, createSlug } from '../utils/time';
 import { saveEventData } from '../utils/storage';
+import { plotPriceHistory, generatePlotFilename } from '../utils/plot';
+import * as path from 'path';
 
 export interface FetchEventOptions {
   startDate?: string;
@@ -100,34 +102,8 @@ export async function fetchEventCommand(
 
   console.log(`\nFound ${event.markets.length} market(s) in this event`);
 
-  // For now, let's fetch data for the first market
-  // TODO: In the future, you might want to fetch all markets
-  const marketFromEvent = event.markets[0];
-  console.log(`\nFetching details for market: ${marketFromEvent.question || marketFromEvent.id}`);
-
-  // Try to get full market details
-  let market: any;
-  try {
-    market = await client.getMarketDetails(marketFromEvent.id);
-  } catch (error) {
-    console.log('Could not fetch market details, using event market data');
-    market = marketFromEvent;
-  }
-
-  // Fetch market tags/categories
-  console.log('Fetching market tags...');
-  const tags = await client.getMarketTags(marketFromEvent.id);
-  if (tags.length > 0) {
-    market.tags = tags;
-    console.log(`Found ${tags.length} tag(s): ${tags.map((t: any) => t.label || t.name).join(', ')}`);
-  }
-
-  // Build tokens array from available data
-  // Markets can have tokens in different formats
-  let tokens: any[] = [];
-
-  // Check various possible locations for CLOB token IDs
-  const checkForTokens = (obj: any) => {
+  // Helper function to check various possible locations for CLOB token IDs
+  const checkForTokens = (obj: any, outcomeOverride?: string) => {
     if (obj.tokens && Array.isArray(obj.tokens) && obj.tokens.length > 0) {
       return obj.tokens;
     }
@@ -152,9 +128,13 @@ export async function fetchEventCommand(
             outcomes = ['Yes', 'No']; // Default for binary markets
           }
         }
+
+        // If this is part of a multi-outcome event, use groupItemTitle as the base outcome name
+        const baseOutcome = outcomeOverride || '';
+
         return tokenIds.map((tokenId: string, index: number) => ({
           token_id: tokenId,
-          outcome: outcomes?.[index] || `Outcome ${index + 1}`,
+          outcome: baseOutcome ? `${baseOutcome}` : (outcomes?.[index] || `Outcome ${index + 1}`),
         }));
       }
     }
@@ -169,18 +149,72 @@ export async function fetchEventCommand(
     return null;
   };
 
-  tokens = checkForTokens(market) || checkForTokens(marketFromEvent) || [];
+  // Fetch data for ALL markets in the event
+  let allTokens: any[] = [];
+  let primaryMarket: any = null;
+  let allTags: any[] = [];
 
-  if (tokens.length === 0) {
-    // Print full structure to debug
-    console.error('\n=== FULL MARKET STRUCTURE ===');
-    console.error(JSON.stringify(market, null, 2));
-    console.error('\n=== FULL MARKET FROM EVENT ===');
-    console.error(JSON.stringify(marketFromEvent, null, 2));
-    throw new Error('\nMarket has no CLOB token IDs available. Please check the structures above and identify where token IDs are stored.');
+  for (let i = 0; i < event.markets.length; i++) {
+    const marketFromEvent = event.markets[i];
+    console.log(`\n[${i + 1}/${event.markets.length}] Fetching market: ${marketFromEvent.question || marketFromEvent.groupItemTitle || marketFromEvent.id}`);
+
+    // Try to get full market details
+    let market: any;
+    try {
+      market = await client.getMarketDetails(marketFromEvent.id);
+    } catch (error) {
+      console.log('  Could not fetch market details, using event market data');
+      market = marketFromEvent;
+    }
+
+    // Store the first market as the primary one (for metadata)
+    if (i === 0) {
+      primaryMarket = market;
+
+      // Fetch market tags/categories from the first market
+      console.log('  Fetching market tags...');
+      const tags = await client.getMarketTags(marketFromEvent.id);
+      if (tags.length > 0) {
+        allTags = tags;
+        console.log(`  Found ${tags.length} tag(s): ${tags.map((t: any) => t.label || t.name).join(', ')}`);
+      }
+    }
+
+    // Determine outcome name for multi-outcome events
+    const outcomeName = marketFromEvent.groupItemTitle || null;
+
+    // Extract tokens from this market
+    const marketTokens = checkForTokens(market, outcomeName) || checkForTokens(marketFromEvent, outcomeName) || [];
+
+    if (marketTokens.length === 0) {
+      console.warn(`  Warning: No tokens found for market ${marketFromEvent.id}`);
+      continue;
+    }
+
+    // For multi-outcome events (with groupItemTitle), only take the first token (Yes)
+    // For binary markets, take all tokens
+    if (outcomeName && marketTokens.length > 1) {
+      console.log(`  Found 1 outcome: ${outcomeName}`);
+      allTokens.push(marketTokens[0]); // Only the "Yes" token
+    } else {
+      console.log(`  Found ${marketTokens.length} token(s)`);
+      allTokens = allTokens.concat(marketTokens);
+    }
   }
 
-  console.log(`Found ${tokens.length} token(s) for this market`);
+  if (allTokens.length === 0) {
+    throw new Error('\nNo CLOB token IDs found in any markets for this event.');
+  }
+
+  // Add tags to the primary market
+  if (allTags.length > 0) {
+    primaryMarket.tags = allTags;
+  }
+
+  console.log(`\nTotal outcomes across all markets: ${allTokens.length}`);
+
+  // Build tokens array from all markets
+  let tokens: any[] = allTokens;
 
   // Fetch data for each token
   const tokenDataPromises = tokens.map(async (token: any) => {
@@ -217,7 +251,7 @@ export async function fetchEventCommand(
 
   // Prepare the complete event data
   const eventData: EventData = {
-    market,
+    market: primaryMarket,
     tokens: tokenDataResults,
     fetchedAt: formatISO(new Date()),
     timeRange: {
@@ -233,4 +267,13 @@ export async function fetchEventCommand(
   console.log(`\nData saved successfully to: ${filePath}`);
   console.log(`Total tokens: ${tokenDataResults.length}`);
   console.log(`Total price data points: ${tokenDataResults.reduce((sum, t) => sum + t.priceHistory.length, 0)}`);
+
+  // Generate plot
+  console.log('\nGenerating price history plot...');
+  const outputDir = options.output || './data';
+  const plotFilename = generatePlotFilename(fileSlug);
+  const plotPath = path.join(outputDir, plotFilename);
+  plotPriceHistory(eventData, plotPath);
+  console.log(`Plot saved to: ${plotPath}`);
+  console.log(`Open the plot in your browser to view the interactive chart.`);
 }
